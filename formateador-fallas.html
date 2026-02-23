@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Formateador de Fallas COA</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 32px 20px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 6px;
+    }
+
+    header p {
+      font-size: 0.9rem;
+      color: #6b7280;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+
+    .card-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+
+    textarea {
+      width: 100%;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 14px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      resize: vertical;
+      transition: border-color 0.2s;
+      color: #1a1a2e;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+
+    #input {
+      min-height: 220px;
+    }
+
+    #output {
+      min-height: 160px;
+      background: #f9fafb;
+      cursor: text;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: #3b82f6;
+      color: #fff;
+    }
+
+    .btn-primary:hover { background: #2563eb; }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .btn-secondary:hover { background: #d1d5db; }
+
+    .btn-clear {
+      background: transparent;
+      color: #9ca3af;
+      padding: 12px 16px;
+    }
+
+    .btn-clear:hover { color: #6b7280; }
+
+    .result-section {
+      display: none;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .result-header .card-label {
+      margin-bottom: 0;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+
+    .warnings {
+      display: none;
+      margin-top: 12px;
+      padding: 12px 16px;
+      background: #fef3c7;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: #92400e;
+      line-height: 1.5;
+    }
+
+    .copy-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #1a1a2e;
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      opacity: 0;
+      transition: transform 0.3s, opacity 0.3s;
+      pointer-events: none;
+    }
+
+    .copy-toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .instructions {
+      margin-top: 32px;
+      text-align: center;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      line-height: 1.6;
+    }
+
+    .instructions strong {
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Formateador de Fallas</h1>
+      <p>Pega los mensajes del Google Chat y obten el formato para Google Sheets</p>
+    </header>
+
+    <div class="card">
+      <div class="card-label">Mensajes de Google Chat</div>
+      <textarea id="input" placeholder="Pega aqui todos los mensajes de fallas copiados del Google Chat..."></textarea>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="formatear()">Formatear Fallas</button>
+      <button class="btn btn-clear" onclick="limpiar()">Limpiar</button>
+    </div>
+
+    <div class="result-section" id="resultSection">
+      <div class="card">
+        <div class="result-header">
+          <div class="card-label">Resultado</div>
+          <div>
+            <span class="badge" id="countBadge">0 fallas</span>
+          </div>
+        </div>
+        <textarea id="output" readonly></textarea>
+        <div class="warnings" id="warnings"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="copiar()">Copiar al Portapapeles</button>
+      </div>
+    </div>
+
+    <div class="instructions">
+      <strong>Columnas:</strong> hora falla ; usuario ; (vacio) ; descripcion falla<br>
+      <strong>Separador:</strong> punto y coma ( ; )
+    </div>
+  </div>
+
+  <div class="copy-toast" id="toast">Copiado al portapapeles</div>
+
+  <script>
+    // ── Clasificadores de lineas ──
+
+    function isTime(line) {
+      return /^\d{1,2}[.:]\d{2}\s*([-–]\s*\d{1,2}[.:]\d{2})?\s*(AM|PM)?\s*$/i.test(line);
+    }
+
+    function isDate(line) {
+      return /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(line);
+    }
+
+    function isGoogleChatMeta(line) {
+      if (/^t[uú],\s/i.test(line)) return true;
+      if (line.toLowerCase().includes('domain_disabled')) return true;
+      if (/,\s*\d{1,2}:\d{2}\s*(a\.m\.|p\.m\.)/i.test(line)) return true;
+      if (/,\s*editado\s*$/i.test(line)) return true;
+      return false;
+    }
+
+    const NOISE_WORDS = ['gracias', 'aheeva', 'editado', 'thanks'];
+
+    function isNoise(line) {
+      const t = line.trim();
+      if (!t) return true;
+      if (isDate(t)) return true;
+      if (isGoogleChatMeta(t)) return true;
+
+      const lower = t.toLowerCase();
+
+      // Greetings and closings
+      if (/^hola\b/i.test(t)) return true;
+      if (lower.includes('buenas tardes') || lower.includes('buenos dias') || lower.includes('buenos días')) return true;
+      if (lower.includes('comparto') || lower.includes('les paso')) return true;
+      if (lower.includes('mis fallas')) return true;
+      if (/^gracias\b/i.test(t) || /gracias\s*[.!]?\s*$/i.test(t)) return true;
+
+      // "fallas" as header (plural, not "falla" singular which is a description)
+      if (/^fallas\b/i.test(t)) return true;
+
+      // Just "AHEEVA" alone (used as section header)
+      if (/^aheeva$/i.test(t)) return true;
+
+      return false;
+    }
+
+    function isUsername(line) {
+      const t = line.trim();
+      if (!/^[a-zA-Z][a-zA-Z0-9]{3,}$/.test(t)) return false;
+      const lower = t.toLowerCase();
+      if (NOISE_WORDS.includes(lower)) return false;
+      if (isTime(t)) return false;
+      return true;
+    }
+
+    // ── Parser principal ──
+
+    function parseFallas(text) {
+      const lines = text.split('\n');
+      const results = [];
+      const warnings = [];
+
+      let timeBuffer = [];
+      let descBuffer = [];
+      let currentUsername = null;
+
+      function flush(username) {
+        if (timeBuffer.length === 0 || descBuffer.length === 0) return;
+        const user = username || currentUsername || '???';
+        const count = Math.min(timeBuffer.length, descBuffer.length);
+
+        if (timeBuffer.length !== descBuffer.length) {
+          warnings.push(
+            user + ': ' + timeBuffer.length + ' horarios y ' + descBuffer.length +
+            ' descripciones (se emparejaron ' + count + ')'
+          );
+        }
+
+        for (let i = 0; i < count; i++) {
+          results.push(timeBuffer[i] + ';' + user + ';;' + descBuffer[i]);
+        }
+
+        timeBuffer = [];
+        descBuffer = [];
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+
+        if (isNoise(trimmed)) continue;
+
+        if (isTime(trimmed)) {
+          // If we already collected descriptions, a new time means new block
+          if (descBuffer.length > 0 && timeBuffer.length > 0) {
+            flush(currentUsername);
+          }
+          timeBuffer.push(trimmed);
+          continue;
+        }
+
+        if (isUsername(trimmed)) {
+          if (timeBuffer.length > 0 && descBuffer.length > 0) {
+            // Username is the signature at end of block: flush with this username
+            flush(trimmed);
+          }
+          currentUsername = trimmed;
+          continue;
+        }
+
+        // Everything else is a description (normalize multiple spaces)
+        descBuffer.push(trimmed.replace(/\s{2,}/g, ' '));
+      }
+
+      // Flush any remaining data
+      flush(currentUsername);
+
+      return { results, warnings };
+    }
+
+    // ── UI ──
+
+    function formatear() {
+      const input = document.getElementById('input').value;
+      if (!input.trim()) return;
+
+      const { results, warnings } = parseFallas(input);
+
+      const outputEl = document.getElementById('output');
+      const resultSection = document.getElementById('resultSection');
+      const countBadge = document.getElementById('countBadge');
+      const warningsEl = document.getElementById('warnings');
+
+      outputEl.value = results.join('\n');
+      countBadge.textContent = results.length + ' falla' + (results.length !== 1 ? 's' : '');
+      resultSection.style.display = 'block';
+
+      if (warnings.length > 0) {
+        warningsEl.innerHTML = '<strong>Advertencias:</strong><br>' + warnings.join('<br>');
+        warningsEl.style.display = 'block';
+      } else {
+        warningsEl.style.display = 'none';
+      }
+
+      // Scroll to result
+      resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function copiar() {
+      const output = document.getElementById('output').value;
+      if (!output) return;
+
+      navigator.clipboard.writeText(output).then(() => {
+        const toast = document.getElementById('toast');
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2000);
+      });
+    }
+
+    function limpiar() {
+      document.getElementById('input').value = '';
+      document.getElementById('output').value = '';
+      document.getElementById('resultSection').style.display = 'none';
+      document.getElementById('warnings').style.display = 'none';
+    }
+
+    // Allow Ctrl+Enter to format
+    document.getElementById('input').addEventListener('keydown', function(e) {
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        formatear();
+      }
+    });
+  </script>
+</body>
+</html>
