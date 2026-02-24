@@ -253,6 +253,7 @@
       if (line.toLowerCase().includes('domain_disabled')) return true;
       if (/,\s*\d{1,2}:\d{2}\s*(a\.m\.|p\.m\.)/i.test(line)) return true;
       if (/,\s*editado\s*$/i.test(line)) return true;
+      if (/,\s*\d+\s*min\b/i.test(line)) return true;
       return false;
     }
 
@@ -268,7 +269,7 @@
 
       // Greetings and closings
       if (/^hola\b/i.test(t)) return true;
-      if (lower.includes('buenas tardes') || lower.includes('buenos dias') || lower.includes('buenos días')) return true;
+      if (lower.includes('buenas tardes') || lower.includes('buenas noches') || lower.includes('buenos dias') || lower.includes('buenos días')) return true;
       if (lower.includes('comparto') || lower.includes('les paso')) return true;
       if (lower.includes('mis fallas')) return true;
       if (/^gracias\b/i.test(t) || /gracias\s*[.!]?\s*$/i.test(t)) return true;
@@ -282,13 +283,22 @@
       return false;
     }
 
-    function isUsername(line) {
+    function extractUsername(line) {
       const t = line.trim();
-      if (!/^[a-zA-Z][a-zA-Z0-9]{3,}$/.test(t)) return false;
-      const lower = t.toLowerCase();
-      if (NOISE_WORDS.includes(lower)) return false;
-      if (isTime(t)) return false;
-      return true;
+      // Exact match: "jmonroygu"
+      if (/^[a-zA-Z][a-zA-Z0-9]{3,}$/.test(t)) {
+        const lower = t.toLowerCase();
+        if (!NOISE_WORDS.includes(lower) && !isTime(t)) return t;
+        return null;
+      }
+      // Username with trailing emoticons/junk: "hdejesus :D 🍓"
+      const m = t.match(/^([a-zA-Z][a-zA-Z0-9]{3,})\s+[^a-zA-Z]/);
+      if (m) {
+        const lower = m[1].toLowerCase();
+        const rest = t.slice(m[1].length).trim();
+        if (!NOISE_WORDS.includes(lower) && !/[a-zA-ZáéíóúñÁÉÍÓÚÑ]{3,}/.test(rest)) return m[1];
+      }
+      return null;
     }
 
     // ── Parser principal ──
@@ -323,12 +333,22 @@
       }
 
       for (let i = 0; i < lines.length; i++) {
-        const trimmed = lines[i].trim();
+        // Fix 5: Strip leading dashes/bullets
+        const trimmed = lines[i].trim().replace(/^[-•]\s*/, '');
+
+        // Fix 2: Extract username from "FALLAS 23/02 imartinezcar" before noise check
+        const fallasMatch = trimmed.match(/^fallas\b.*\s+([a-zA-Z][a-zA-Z0-9]{3,})\s*$/i);
+        if (fallasMatch && !NOISE_WORDS.includes(fallasMatch[1].toLowerCase())) {
+          if (timeBuffer.length > 0 && descBuffer.length > 0) {
+            flush(currentUsername);
+          }
+          currentUsername = fallasMatch[1];
+          continue;
+        }
 
         if (isNoise(trimmed)) continue;
 
         if (isTime(trimmed)) {
-          // If we already collected descriptions, a new time means new block
           if (descBuffer.length > 0 && timeBuffer.length > 0) {
             flush(currentUsername);
           }
@@ -336,12 +356,24 @@
           continue;
         }
 
-        if (isUsername(trimmed)) {
-          if (timeBuffer.length > 0 && descBuffer.length > 0) {
-            // Username is the signature at end of block: flush with this username
-            flush(trimmed);
+        // Fix 3: Line starts with time + description text: "16:35 SE VA EL INTERNET..."
+        const timeDescMatch = trimmed.match(/^(\d{1,2}[.:]\d{2}(?:\s*[-–]\s*\d{1,2}[.:]\d{2})?(?:\s*(?:AM|PM))?)\s+(.+)$/i);
+        if (timeDescMatch) {
+          if (descBuffer.length > 0 && timeBuffer.length > 0) {
+            flush(currentUsername);
           }
-          currentUsername = trimmed;
+          timeBuffer.push(timeDescMatch[1]);
+          descBuffer.push(timeDescMatch[2].replace(/\s{2,}/g, ' '));
+          continue;
+        }
+
+        // Fix 1: Use extractUsername instead of isUsername
+        const username = extractUsername(trimmed);
+        if (username) {
+          if (timeBuffer.length > 0 && descBuffer.length > 0) {
+            flush(username);
+          }
+          currentUsername = username;
           continue;
         }
 
