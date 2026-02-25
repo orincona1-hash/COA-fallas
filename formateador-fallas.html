@@ -241,7 +241,14 @@
     // ── Clasificadores de lineas ──
 
     function isTime(line) {
-      return /^\d{1,2}[.:]\d{2}\s*([-–]\s*\d{1,2}[.:]\d{2})?\s*(AM|PM)?\s*$/i.test(line);
+      return /^\d{1,2}[.:]\d{2,}\s*([-–]\s*\d{1,2}[.:]\d{2,})?\s*(AM|PM)?\s*$/i.test(line);
+    }
+
+    // Fix typos like "17:1750" → "17:50" (extra digits in minutes)
+    function cleanTime(time) {
+      return time.replace(/(\d{1,2}[.:])(\d{3,})/g, function(m, prefix, digits) {
+        return prefix + digits.slice(-2);
+      });
     }
 
     function isDate(line) {
@@ -267,12 +274,16 @@
 
       const lower = t.toLowerCase();
 
+      // Lines with no alphanumeric content (separators: "***", "---", "===", etc.)
+      if (!/[a-zA-Z0-9áéíóúñÁÉÍÓÚÑ]/.test(t)) return true;
+
       // Greetings and closings
       if (/^hola\b/i.test(t)) return true;
       if (lower.includes('buenas tardes') || lower.includes('buenas noches') || lower.includes('buenos dias') || lower.includes('buenos días')) return true;
       if (lower.includes('comparto') || lower.includes('les paso')) return true;
       if (lower.includes('mis fallas')) return true;
-      if (/^gracias\b/i.test(t) || /gracias\s*[.!]?\s*$/i.test(t)) return true;
+      if (lower.includes('gracias')) return true;
+      if (lower.includes('thanks')) return true;
 
       // "fallas" as header (plural, not "falla" singular which is a description)
       if (/^fallas\b/i.test(t)) return true;
@@ -346,23 +357,33 @@
           continue;
         }
 
+        // Extract username from "sduranva, gracias" / "jjassog, gracias!!!" before noise discards it
+        const gratMatch = trimmed.match(/^([a-zA-Z][a-zA-Z0-9]{3,})[,\s]+gracias/i);
+        if (gratMatch && !NOISE_WORDS.includes(gratMatch[1].toLowerCase())) {
+          if (timeBuffer.length > 0 && descBuffer.length > 0) {
+            flush(gratMatch[1]);
+          }
+          currentUsername = gratMatch[1];
+          continue;
+        }
+
         if (isNoise(trimmed)) continue;
 
         if (isTime(trimmed)) {
           if (descBuffer.length > 0 && timeBuffer.length > 0) {
             flush(currentUsername);
           }
-          timeBuffer.push(trimmed);
+          timeBuffer.push(cleanTime(trimmed));
           continue;
         }
 
         // Fix 3: Line starts with time + description text: "16:35 SE VA EL INTERNET..."
-        const timeDescMatch = trimmed.match(/^(\d{1,2}[.:]\d{2}(?:\s*[-–]\s*\d{1,2}[.:]\d{2})?(?:\s*(?:AM|PM))?)\s+(.+)$/i);
+        const timeDescMatch = trimmed.match(/^(\d{1,2}[.:]\d{2,}(?:\s*[-–]\s*\d{1,2}[.:]\d{2,})?(?:\s*(?:AM|PM))?)\s+(.+)$/i);
         if (timeDescMatch) {
           if (descBuffer.length > 0 && timeBuffer.length > 0) {
             flush(currentUsername);
           }
-          timeBuffer.push(timeDescMatch[1]);
+          timeBuffer.push(cleanTime(timeDescMatch[1]));
           descBuffer.push(timeDescMatch[2].replace(/\s{2,}/g, ' '));
           continue;
         }
