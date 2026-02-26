@@ -241,14 +241,35 @@
     // ── Clasificadores de lineas ──
 
     function isTime(line) {
-      return /^\d{1,2}[.:]\d{2,}\s*([-–]\s*\d{1,2}[.:]\d{2,})?\s*(AM|PM)?\s*$/i.test(line);
+      // Tiempo simple o rango con separadores: -, –, "a", o espacio entre dos tiempos
+      return /^\d{1,2}[.:]\d{2,}\s*(?:am|pm)?\s*(?:[-–]\s*|\s+a\s+|\s+(?=\d{1,2}[.:]\d))?\s*(?:\d{1,2}[.:]\d{2,})?\s*(?:am|pm)?\s*$/i.test(line);
     }
 
-    // Fix typos like "17:1750" → "17:50" (extra digits in minutes)
-    function cleanTime(time) {
-      return time.replace(/(\d{1,2}[.:])(\d{3,})/g, function(m, prefix, digits) {
-        return prefix + digits.slice(-2);
-      });
+    function normalizeTime(h, m, ampm) {
+      let hour = parseInt(h);
+      const min = m.slice(-2); // Fix typos: "1750" → "50"
+      ampm = (ampm || '').toLowerCase();
+      if (ampm === 'pm' && hour < 12) hour += 12;
+      else if (ampm === 'am' && hour === 12) hour = 0;
+      else if (!ampm && hour <= 9) hour += 12; // Asumir PM si ≤ 9
+      return hour + ':' + min;
+    }
+
+    function cleanTime(raw) {
+      // Try range first: two time components with any separator
+      const rangeRe = /^(\d{1,2})[.:](\d{2,})\s*(am|pm)?\s*(?:[-–]\s*|\s+a\s+|\s+)(\d{1,2})[.:](\d{2,})\s*(am|pm)?\s*$/i;
+      const rm = raw.match(rangeRe);
+      if (rm) {
+        let [, h1, m1, ap1, h2, m2, ap2] = rm;
+        return normalizeTime(h1, m1, ap1 || ap2) + '-' + normalizeTime(h2, m2, ap2 || ap1);
+      }
+      // Single time
+      const singleRe = /^(\d{1,2})[.:](\d{2,})\s*(am|pm)?\s*$/i;
+      const sm = raw.match(singleRe);
+      if (sm) {
+        return normalizeTime(sm[1], sm[2], sm[3]);
+      }
+      return raw;
     }
 
     function isDate(line) {
@@ -284,6 +305,7 @@
       if (lower.includes('mis fallas')) return true;
       if (lower.includes('gracias')) return true;
       if (lower.includes('thanks')) return true;
+      if (lower.includes('paso fallas') || lower.includes('dejo mis fallas')) return true;
 
       // "fallas" as header (plural, not "falla" singular which is a description)
       if (/^fallas\b/i.test(t)) return true;
@@ -357,8 +379,16 @@
           continue;
         }
 
-        // Extract username from "sduranva, gracias" / "jjassog, gracias!!!" before noise discards it
-        const gratMatch = trimmed.match(/^([a-zA-Z][a-zA-Z0-9]{3,})[,\s]+gracias/i);
+        // Extract username from "usuario: orincona" before noise check
+        const usuarioMatch = trimmed.match(/^usuario:\s*([a-zA-Z][a-zA-Z0-9]{3,})\s*$/i);
+        if (usuarioMatch) {
+          if (timeBuffer.length > 0 && descBuffer.length > 0) flush(usuarioMatch[1]);
+          currentUsername = usuarioMatch[1];
+          continue;
+        }
+
+        // Extract username from "sduranva, gracias" / "jesparzahe Thanks" before noise discards it
+        const gratMatch = trimmed.match(/^([a-zA-Z][a-zA-Z0-9]{3,})[,\s]+(?:gracias|thanks)/i);
         if (gratMatch && !NOISE_WORDS.includes(gratMatch[1].toLowerCase())) {
           if (timeBuffer.length > 0 && descBuffer.length > 0) {
             flush(gratMatch[1]);
@@ -377,8 +407,8 @@
           continue;
         }
 
-        // Fix 3: Line starts with time + description text: "16:35 SE VA EL INTERNET..."
-        const timeDescMatch = trimmed.match(/^(\d{1,2}[.:]\d{2,}(?:\s*[-–]\s*\d{1,2}[.:]\d{2,})?(?:\s*(?:AM|PM))?)\s+(.+)$/i);
+        // Line starts with time + description text: "16:35 SE VA EL INTERNET..."
+        const timeDescMatch = trimmed.match(/^(\d{1,2}[.:]\d{2,}(?:\s*(?:am|pm))?\s*(?:[-–]\s*|\s+a\s+|\s+(?=\d{1,2}[.:]\d))\s*\d{1,2}[.:]\d{2,}(?:\s*(?:am|pm))?|\d{1,2}[.:]\d{2,}(?:\s*(?:am|pm))?)\s+(.+)$/i);
         if (timeDescMatch) {
           if (descBuffer.length > 0 && timeBuffer.length > 0) {
             flush(currentUsername);
