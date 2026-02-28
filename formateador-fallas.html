@@ -370,7 +370,7 @@
         const trimmed = lines[i].trim().replace(/^[-•]\s*/, '');
 
         // Fix 2: Extract username from "FALLAS 23/02 imartinezcar" before noise check
-        const fallasMatch = trimmed.match(/^fallas\b.*\s+([a-zA-Z][a-zA-Z0-9]{3,})\s*$/i);
+        const fallasMatch = trimmed.match(/^fallas\b.*\s+([a-zA-Z][a-zA-Z0-9]{3,})(?:\s+\d{1,2}\/\d{1,2}\/\d{2,4})?\s*$/i);
         if (fallasMatch && !NOISE_WORDS.includes(fallasMatch[1].toLowerCase())) {
           if (timeBuffer.length > 0 && descBuffer.length > 0) {
             flush(currentUsername);
